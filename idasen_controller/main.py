@@ -192,14 +192,14 @@ async def unsubscribe(client, uuid):
         # This happens on windows, I don't know why
         pass
 
-async def move_to(client, target):
+async def move_to(client, target, do_print):
     """Move the desk to a specified height"""
 
     initial_height, speed = struct.unpack("<Hh", await client.read_gatt_char(UUID_HEIGHT))
 
     # Initialise by setting the movement direction
     direction = "UP" if target > initial_height else "DOWN"
-    
+
     # Set up callback to run when the desk height changes. It will resend
     # movement commands until the desk has reached the target height.
     loop = asyncio.get_event_loop()
@@ -210,12 +210,12 @@ async def move_to(client, target):
         global count
         height, speed = struct.unpack("<Hh", data)
         count = count + 1
-        print("Height: {:4.0f}mm Target: {:4.0f}mm Speed: {:2.0f}mm/s".format(rawToMM(height), rawToMM(target), rawToSpeed(speed)))
+        do_print("Height: {:4.0f}mm Target: {:4.0f}mm Speed: {:2.0f}mm/s".format(rawToMM(height), rawToMM(target), rawToSpeed(speed)))
 
-       
+
         # Stop if we have reached the target OR
         # If you touch desk control while the script is running then movement
-        # callbacks stop. The final call will have speed 0 so detect that 
+        # callbacks stop. The final call will have speed 0 so detect that
         # and stop.
         if speed == 0 or has_reached_target(height, target):
             asyncio.create_task(stop(client))
@@ -224,7 +224,7 @@ async def move_to(client, target):
                 move_done.set_result(True)
             except asyncio.exceptions.InvalidStateError:
                 # This happens on windows, I dont know why
-                pass 
+                pass
         # Or resend the movement command if we have not yet reached the
         # target.
         # Each movement command seems to run the desk motors for about 1
@@ -240,7 +240,7 @@ async def move_to(client, target):
             asyncio.create_task(move_down(client))
             count = 0
 
-    # Listen for changes to desk height and send first move command (if we are 
+    # Listen for changes to desk height and send first move command (if we are
     # not already at the target height).
     if not has_reached_target(initial_height, target):
         await subscribe(client, UUID_HEIGHT, _move_to)
@@ -251,7 +251,7 @@ async def move_to(client, target):
         try:
             await asyncio.wait_for(move_done, timeout=config['movement_timeout'])
         except asyncio.TimeoutError as e:
-            print('Timed out while waiting for desk')
+            do_print('Timed out while waiting for desk')
             await unsubscribe(client, UUID_HEIGHT)
 
 
@@ -270,7 +270,7 @@ def unpickle_desk():
 def pickle_desk(desk):
     """Attempt to pickle the desk"""
     if IS_LINUX:
-        with open(PICKLE_FILE, 'wb') as f: 
+        with open(PICKLE_FILE, 'wb') as f:
             pickle.dump(desk, f)
 
 async def scan(mac_address = None):
@@ -310,7 +310,7 @@ async def connect(client = None, attempt = 0):
             client = BleakClient(desk, device=config['adapter_name'])
         await client.connect(timeout=config['connection_timeout'])
         print("Connected {}".format(config['mac_address']))
-        return client 
+        return client
     except BleakError as e:
         if attempt == 0 and pickled:
             # Could be a bad pickle so remove it and try again
@@ -330,11 +330,11 @@ async def disconnect(client):
     if client.is_connected:
         await client.disconnect()
 
-async def run_command(client, config):
+async def run_command(client, config, do_print=print):
     """Begin the action specified by command line arguments and config"""
     # Always print current height
     initial_height, speed = struct.unpack("<Hh", await client.read_gatt_char(UUID_HEIGHT))
-    print("Height: {:4.0f}mm".format(rawToMM(initial_height)))
+    do_print("Height: {:4.0f}mm".format(rawToMM(initial_height)))
     target = None
     if config['monitor']:
         # Print changes to height data
@@ -358,7 +358,7 @@ async def run_command(client, config):
         # If we were moving to a target height, wait, then print the actual final height
         await asyncio.sleep(1)
         final_height, speed = struct.unpack("<Hh", await client.read_gatt_char(UUID_HEIGHT))
-        print("Final height: {:4.0f}mm (Target: {:4.0f}mm)".format(rawToMM(final_height), rawToMM(target)))
+        do_print("Final height: {:4.0f}mm (Target: {:4.0f}mm)".format(rawToMM(final_height), rawToMM(target)))
 
 async def run_server(client, config):
     """Start a tcp server to listen for commands"""
@@ -373,11 +373,12 @@ async def run_server(client, config):
 async def run_forwarded_command(client, config, reader, writer):
     """Run commands received by the tcp server"""
     print("Received command")
-    request = (await reader.read()).decode('utf8')
+    request = (await reader.readline()).decode('utf8')
     forwarded_config = json.loads(str(request))
     merged_config = {**config, **forwarded_config}
-    await run_command(client, merged_config)
+    await run_command(client, merged_config, lambda x: writer.write((x + "\n").encode()))
     writer.close()
+    await writer.wait_closed()
 
 async def forward_command(config):
     """Send commands to the tcp server"""
