@@ -146,11 +146,11 @@ if config['stand_height'] > MAX_HEIGHT:
     parser.error("Stand height must be less than {}".format(MAX_HEIGHT))
 
 config['mac_address'] = config['mac_address'].upper()
-config['stand_height_raw'] = mmToRaw(config['stand_height'])
-config['sit_height_raw'] = mmToRaw(config['sit_height'])
+config['stand_height_raw'] = config['stand_height']
+config['sit_height_raw'] = config['sit_height']
 config['height_tolerance_raw'] = 10 * config['height_tolerance']
 if config['move_to']:
-    config['move_to_raw'] = mmToRaw(config['move_to'])
+    config['move_to_raw'] = config['move_to']
 
 if IS_WINDOWS:
     # Windows doesn't use this parameter so rename it so it looks nice for the logs
@@ -345,15 +345,15 @@ async def run_command(client, config, do_print=print):
     elif config['sit']:
         # Move to configured sit height
         target = config['sit_height_raw']
-        await move_to(client, target, do_print)
+        await move_to(client, mmToRaw(target), do_print)
     elif config['stand']:
         # Move to configured stand height
         target = config['stand_height_raw']
-        await move_to(client, target, do_print)
+        await move_to(client, mmToRaw(target), do_print)
     elif config['move_to']:
         # Move to custom height
         target = config['move_to_raw']
-        await move_to(client, target, do_print)
+        await move_to(client, mmToRaw(target), do_print)
     if target:
         # If we were moving to a target height, wait, then print the actual final height
         await asyncio.sleep(1)
