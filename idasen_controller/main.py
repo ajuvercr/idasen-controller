@@ -366,6 +366,7 @@ async def run_server(client, config):
         print("Lost connection with {}".format(client.address))
         asyncio.create_task(connect(client))
     client.set_disconnected_callback(disconnect_callback)
+    print("Starting server on", config['server_address'], config['server_port'])
     server = await asyncio.start_server(functools.partial(run_forwarded_command, client, config), config['server_address'], config['server_port'])
     print("Server listening")
     await server.serve_forever()
