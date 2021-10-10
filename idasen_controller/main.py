@@ -376,10 +376,10 @@ async def run_forwarded_command(client, config, reader, writer):
     print("Received command")
     request = (await reader.readline()).decode('utf8')
     forwarded_config = json.loads(str(request))
+    print("Got request", forwarded_config)
     merged_config = {**config, **forwarded_config}
     await run_command(client, merged_config, lambda x: writer.write((x + "\n").encode()))
     writer.close()
-    await writer.wait_closed()
 
 async def forward_command(config):
     """Send commands to the tcp server"""
